@@ -139,8 +139,10 @@ generate_vm_args() {
     if [ "$COOKIE_MODE" = "ignore" ]; then
         printf "Cookie will be used from \"$HOME/.erlang.cookie\".\n"
         sed -i -e '/-setcookie/s/^/## removed: /' $VMARGS_PATH
-        COOKIE=`cat $HOME/.erlang.cookie`
-        printf "\n## set due to \"COOKIE_MODE=ignore\"\n-setcookie $COOKIE\n" >> $VMARGS_PATH
+        if [ -s $HOME/.erlang.cookie ] ; then
+            COOKIE=`cat $HOME/.erlang.cookie`
+            printf "\n## set due to \"COOKIE_MODE=ignore\"\n-setcookie $COOKIE\n" >> $VMARGS_PATH
+        fi
         ERL_COOKIE_ARG=""
     elif [ -s $COOKIE_MODE ] && [ ! -z $COOKIE_MODE ]; then
         # COOKIE_MODE is pointing to a cookie file
@@ -187,10 +189,10 @@ generate_sys_config() {
                 __conform="$ROOTDIR/bin/conform"
             fi
 
-            # remove old sys.config since conform seems to merge this one too
-            rm -v "$GENERATED_CONFIG_DIR/sys.config"
+            # remove old sys.config first from the mutable dir since conform also considers this file for merging
+            rm -v $SYS_CONFIG
 
-            result="$("$BINDIR/escript" "$__conform" --conf "$__conform_file" --schema "$__schema_file" --config "$SYS_CONFIG" --output-dir "$GENERATED_CONFIG_DIR")"
+            result="$("$BINDIR/escript" "$__conform" --conf "$__conform_file" --schema "$__schema_file" --config "$RELEASE_CONFIG_DIR/sys.config" --output-dir "$GENERATED_CONFIG_DIR")"
             exit_status="$?"
             if [ "$exit_status" -ne 0 ]; then
                 exit "$exit_status"
@@ -258,15 +260,16 @@ adjust_name
 
 PIPE_DIR="${PIPE_DIR:-/tmp/erl_pipes/$NAME/}"
 
-# Extract the target cookie
-COOKIE_ARG="$(grep '^-setcookie' "$VMARGS_PATH")"
-if [ -z "$COOKIE_ARG" ]; then
-    echo "vm.args needs to have a -setcookie parameter."
-    exit 1
+if [ ! -z "$(grep '^-setcookie' "$VMARGS_PATH")" ]; then
+    COOKIE_ARG="$(grep '^-setcookie' "$VMARGS_PATH")"
+    COOKIE="$(echo "$COOKIE_ARG" | awk '{print $2}')"
+else
+    # cookie will be used from $HOME/.erlang.cookie
+    COOKIE_ARG=""
+    COOKIE=""
 fi
 
 # Extract cookie name from COOKIE_ARG
-COOKIE="$(echo "$COOKIE_ARG" | awk '{print $2}')"
 ERL_COOKIE_ARG=$COOKIE_ARG
 
 find_erts_dir
