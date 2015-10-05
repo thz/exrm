@@ -116,7 +116,7 @@ adjust_name() {
 }
 
 #the node name can be set via environment variables
-#NODE_NAME or NODE_SNAME which overwrite a given name
+#NODE_NAME which overwrites a given name
 #from vm.args
 generate_vm_args() {
     printf "Generate vm.args in $GENERATED_CONFIG_DIR ...\n"
@@ -124,10 +124,10 @@ generate_vm_args() {
     # get a fresh release vm.args
     cp "$RELEASE_CONFIG_DIR/vm.args" "$GENERATED_CONFIG_DIR/vm.args"
 
-    if [ ! -z "$NODE_NAME" ]; then
+    if [ -n "$NODE_NAME" ]; then
         #remove naming flags from vm.args
-        sed -i -e '/-name/s/^/## removed: /' $VMARGS_PATH
-        sed -i -e '/-sname/s/^/## removed: /' $VMARGS_PATH
+        sed -i -e 's/^[ \t]*-s\?name\>/# disabled by exrm-boot: &/' $VMARGS_PATH
+
         NAME=$NODE_NAME
         adjust_name
         printf "Using node name \"$NAME\" from environment variable NODE_NAME.\n"
@@ -135,21 +135,17 @@ generate_vm_args() {
         printf "\n## set via NODE_NAME env variable\n-name $NAME\n" >> $VMARGS_PATH
         NAME_TYPE="-name"
     fi
-    
+
     if [ "$COOKIE_MODE" = "ignore" ]; then
-        printf "Cookie will be used from \"$HOME/.erlang.cookie\".\n"
-        sed -i -e '/-setcookie/s/^/## removed: /' $VMARGS_PATH
-        if [ -s $HOME/.erlang.cookie ] ; then
-            COOKIE=`cat $HOME/.erlang.cookie`
-            printf "\n## set due to \"COOKIE_MODE=ignore\"\n-setcookie $COOKIE\n" >> $VMARGS_PATH
-        fi
+        printf "No Cookie handling. (\$HOME/.erlang.cookie might apply).\n"
         ERL_COOKIE_ARG=""
-    elif [ -s $COOKIE_MODE ] && [ ! -z $COOKIE_MODE ]; then
+    elif [ "${COOKIE_MODE:0:1}" = "/" ] && [ -s "$COOKIE_MODE" ] ; then
         # COOKIE_MODE is pointing to a cookie file
         printf "Cookie will be used from \"$COOKIE_MODE\".\n"
-        sed -i -e '/-setcookie/s/^/## removed: /' $VMARGS_PATH
-        COOKIE=`cat $COOKIE_MODE`
-        printf "\n## used from \"$COOKE_FILE\"\n-setcookie $COOKIE\n" >> $VMARGS_PATH
+        sed -i -e 's/^[ \t]*-setcookie/# disabled by exrm-boot: &/' $VMARGS_PATH
+        printf "\n## used from \"$COOKE_FILE\"\n-setcookie" >> $VMARGS_PATH
+        cat "$COOKIE_MODE" >> $VMARGS_PATH
+        echo >> $VMARGS_PATH
         ERL_COOKIE_ARG="-setcookie $COOKIE"
     else
         # COOKIE is read before
